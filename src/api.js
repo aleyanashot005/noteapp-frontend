@@ -33,15 +33,21 @@ export async function searchNotes(q, includeArchived = false) {
   return res.data
 }
 
-export async function createNote(title, content, isEncrypted = false) {
+export async function createNote(title, content, isEncrypted = false, color = null) {
   const headers = await authHeaders()
-  const res = await axios.post(`${API_URL}/api/notes`, { title, content, isEncrypted }, { headers })
+  const res = await axios.post(`${API_URL}/api/notes`, { title, content, isEncrypted, color }, { headers })
   return res.data
 }
 
-export async function updateNote(id, title, content) {
+export async function updateNote(id, title, content, color = null) {
   const headers = await authHeaders()
-  const res = await axios.put(`${API_URL}/api/notes/${id}`, { title, content }, { headers })
+  const res = await axios.put(`${API_URL}/api/notes/${id}`, { title, content, color }, { headers })
+  return res.data
+}
+
+export async function updateNoteColor(id, color) {
+  const headers = await authHeaders()
+  const res = await axios.patch(`${API_URL}/api/notes/${id}/color`, { color }, { headers })
   return res.data
 }
 

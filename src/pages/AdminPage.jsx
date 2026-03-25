@@ -1,24 +1,43 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchAdminStats, fetchAdminUsers, adminDeleteNote, toggleAdminRole } from '../api'
+import axios from 'axios'
+import { supabase } from '../supabaseClient'
+const API_URL = import.meta.env.VITE_API_URL
 
 export default function AdminPage() {
   const [stats, setStats] = useState(null)
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('stats')
+  const [debug, setDebug] = useState(null)
 
   useEffect(() => {
+    loadDebug()
     loadStats()
     loadUsers()
   }, [])
+
+  const loadDebug = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await axios.get(`${API_URL}/api/admin/whoami`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      })
+      setDebug(res.data)
+    } catch (err) {
+      setDebug({ error: err?.response?.status, message: err?.message })
+    }
+  }
 
   const loadStats = async () => {
     try {
       const data = await fetchAdminStats()
       setStats(data)
-    } catch {
-      setError('Access denied or failed to load stats')
+    } catch (err) {
+      const status = err?.response?.status
+      if (status === 403) setError('Access denied — admin privileges required')
+      else setError(`Failed to load stats (${status ?? err?.message})`)
     }
   }
 
@@ -26,7 +45,10 @@ export default function AdminPage() {
     try {
       const data = await fetchAdminUsers()
       setUsers(data)
-    } catch { }
+    } catch (err) {
+      const status = err?.response?.status
+      if (status !== 403) setError(`Failed to load users (${status ?? err?.message})`)
+    }
   }
 
   const handleToggleAdmin = async (userId) => {
@@ -42,6 +64,11 @@ export default function AdminPage() {
     <div style={styles.container}>
       <Link to="/" style={styles.back}>← Back</Link>
       <p style={styles.error}>{error}</p>
+      {debug && (
+        <pre style={{ fontSize: '0.75rem', background: '#f3f4f6', padding: '1rem', borderRadius: '6px', marginTop: '1rem', overflowX: 'auto' }}>
+          {JSON.stringify(debug, null, 2)}
+        </pre>
+      )}
     </div>
   )
 

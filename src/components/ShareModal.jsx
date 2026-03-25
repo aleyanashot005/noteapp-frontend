@@ -29,8 +29,11 @@ export default function ShareModal({ note, onClose }) {
       await shareNote(note.id, email, permission)
       setEmail('')
       await loadShares()
-    } catch {
-      setError('Failed to share note')
+    } catch (err) {
+      const detail = err?.response?.status
+        ? `${err.response.status} – ${JSON.stringify(err.response.data)}`
+        : err?.message
+      setError(`Failed to share: ${detail}`)
     } finally {
       setLoading(false)
     }

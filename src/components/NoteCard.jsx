@@ -1,84 +1,177 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import ColorPicker from './ColorPicker'
 
-// Regex to detect URLs
 const URL_REGEX = /(https?:\/\/[^\s]+)/g
+const MARKDOWN_PATTERN = /^(#{1,6}\s|[*_]{1,2}|\d+\.\s|-\s|\[.*\]\(.*\)|```)/m
 
 function renderContent(content) {
-  // Check if content looks like markdown (has headers, bold, lists, etc.)
-  const markdownPattern = /^(#{1,6}\s|[*_]{1,2}|\d+\.\s|-\s|\[.*\]\(.*\)|```)/m
-  if (markdownPattern.test(content)) {
-    return <ReactMarkdown>{content}</ReactMarkdown>
+  if (MARKDOWN_PATTERN.test(content)) {
+    return <div className="note-markdown"><ReactMarkdown>{content}</ReactMarkdown></div>
   }
-
-  // Otherwise render with clickable URLs
   const parts = content.split(URL_REGEX)
   return (
-    <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+    <span style={{ whiteSpace: 'pre-wrap' }}>
       {parts.map((part, i) =>
         URL_REGEX.test(part)
-          ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#4f46e5' }}>{part}</a>
+          ? <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+              style={{ color: '#1a73e8' }} onClick={e => e.stopPropagation()}>{part}</a>
           : part
       )}
-    </p>
+    </span>
   )
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onArchive, onShare, isShared, sharePermission }) {
-  const [showContent, setShowContent] = useState(false)
+export default function NoteCard({ note, view, onEdit, onDelete, onArchive, onShare, onColorChange, isShared, sharePermission }) {
+  const [hovered, setHovered] = useState(false)
+  const [showColorPicker, setShowColorPicker] = useState(false)
   const canEdit = !isShared || sharePermission === 'Edit'
+  const bg = note.color || '#fff'
+  const isList = view === 'list'
 
   return (
-    <div style={{
-      ...styles.card,
-      borderLeft: note.isArchived ? '4px solid #9ca3af' : note.isEncrypted ? '4px solid #f59e0b' : '4px solid #4f46e5'
-    }}>
-      <div style={styles.cardHeader} onClick={() => setShowContent(v => !v)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
-          <h3 style={styles.title}>{note.title}</h3>
-          {note.isEncrypted && <span style={styles.encBadge}>🔒 Encrypted</span>}
-          {note.isArchived && <span style={styles.archBadge}>Archived</span>}
-          {isShared && <span style={styles.sharedBadge}>Shared ({sharePermission})</span>}
-        </div>
-        <span style={styles.chevron}>{showContent ? '▲' : '▼'}</span>
-      </div>
-
-      {showContent && (
-        <div style={styles.content}>
-          {note.isEncrypted
-            ? <p style={{ color: '#9ca3af', fontStyle: 'italic' }}>🔒 This note is encrypted. Edit to decrypt.</p>
-            : renderContent(note.content)
-          }
+    <div
+      style={{ ...styles.card, background: bg, ...(isList ? styles.cardList : {}) }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setShowColorPicker(false) }}
+    >
+      {/* Title */}
+      {note.title && (
+        <div style={styles.title} onClick={() => canEdit && onEdit(note)}>
+          {note.title}
+          {note.isEncrypted && <span style={styles.lock}>🔒</span>}
         </div>
       )}
 
-      <div style={styles.footer}>
-        <span style={styles.date}>{new Date(note.updatedAt).toLocaleDateString()}</span>
+      {/* Content */}
+      <div style={{ ...styles.content, cursor: canEdit ? 'pointer' : 'default' }}
+           onClick={() => canEdit && onEdit(note)}>
+        {note.isEncrypted
+          ? <span style={{ color: '#80868b', fontStyle: 'italic' }}>Encrypted note</span>
+          : <div style={isList ? {} : styles.clamp}>
+              {renderContent(note.content)}
+            </div>
+        }
+      </div>
+
+      {/* Badges */}
+      <div style={styles.badges}>
+        {isShared && <span style={styles.badge}>Shared ({sharePermission})</span>}
+        {note.isArchived && <span style={styles.badge}>Archived</span>}
+      </div>
+
+      {/* Hover actions */}
+      {hovered && (
         <div style={styles.actions}>
-          {canEdit && <button style={styles.editBtn} onClick={() => onEdit(note)}>Edit</button>}
-          {!isShared && <button style={styles.shareBtn} onClick={() => onShare(note)}>Share</button>}
-          {!isShared && <button style={styles.archiveBtn} onClick={() => onArchive(note.id)}>{note.isArchived ? 'Unarchive' : 'Archive'}</button>}
-          {!isShared && <button style={styles.deleteBtn} onClick={() => onDelete(note.id)}>Delete</button>}
+          <div style={{ position: 'relative' }}>
+            <ActionBtn title="Change color" onClick={() => setShowColorPicker(v => !v)}>🎨</ActionBtn>
+            {showColorPicker && (
+              <ColorPicker
+                currentColor={note.color}
+                onChange={color => onColorChange(note.id, color)}
+                onClose={() => setShowColorPicker(false)}
+              />
+            )}
+          </div>
+          {!isShared && <ActionBtn title="Share" onClick={() => onShare(note)}>👤</ActionBtn>}
+          {!isShared && (
+            <ActionBtn title={note.isArchived ? 'Unarchive' : 'Archive'} onClick={() => onArchive(note.id)}>
+              {note.isArchived ? '📤' : '📥'}
+            </ActionBtn>
+          )}
+          {canEdit && <ActionBtn title="Edit" onClick={() => onEdit(note)}>✏️</ActionBtn>}
+          {!isShared && <ActionBtn title="Delete" onClick={() => onDelete(note.id)}>🗑️</ActionBtn>}
         </div>
+      )}
+
+      {/* Date */}
+      <div style={{ ...styles.date, opacity: hovered ? 0 : 1 }}>
+        {new Date(note.updatedAt).toLocaleDateString()}
       </div>
     </div>
   )
 }
 
+function ActionBtn({ title, onClick, children }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      title={title}
+      onClick={e => { e.stopPropagation(); onClick() }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: hover ? 'rgba(0,0,0,0.08)' : 'transparent',
+        border: 'none',
+        borderRadius: '50%',
+        width: '28px',
+        height: '28px',
+        fontSize: '14px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 const styles = {
-  card: { background: '#fff', padding: '1rem 1.25rem', borderRadius: '8px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: '0.75rem' },
-  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' },
-  title: { margin: 0, fontSize: '1rem', fontWeight: 600 },
-  chevron: { color: '#9ca3af', fontSize: '0.75rem' },
-  content: { marginTop: '0.75rem', color: '#374151', fontSize: '0.95rem', lineHeight: 1.6, borderTop: '1px solid #f3f4f6', paddingTop: '0.75rem' },
-  footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' },
-  date: { fontSize: '0.75rem', color: '#9ca3af' },
-  actions: { display: 'flex', gap: '0.4rem' },
-  editBtn: { padding: '0.3rem 0.7rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' },
-  shareBtn: { padding: '0.3rem 0.7rem', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' },
-  archiveBtn: { padding: '0.3rem 0.7rem', background: '#6b7280', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' },
-  deleteBtn: { padding: '0.3rem 0.7rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' },
-  encBadge: { fontSize: '0.7rem', padding: '0.15rem 0.4rem', background: '#fef3c7', color: '#92400e', borderRadius: '4px' },
-  archBadge: { fontSize: '0.7rem', padding: '0.15rem 0.4rem', background: '#f3f4f6', color: '#6b7280', borderRadius: '4px' },
-  sharedBadge: { fontSize: '0.7rem', padding: '0.15rem 0.4rem', background: '#ede9fe', color: '#5b21b6', borderRadius: '4px' }
+  card: {
+    borderRadius: '8px',
+    border: '1px solid #e0e0e0',
+    padding: '12px',
+    cursor: 'default',
+    position: 'relative',
+    breakInside: 'avoid',
+    marginBottom: '12px',
+    transition: 'box-shadow 0.15s',
+    ':hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }
+  },
+  cardList: {
+    maxWidth: '600px',
+    width: '100%',
+  },
+  title: {
+    fontWeight: 500,
+    fontSize: '14px',
+    marginBottom: '8px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  lock: { fontSize: '12px' },
+  content: {
+    fontSize: '13px',
+    color: '#3c4043',
+    lineHeight: '1.5',
+    wordBreak: 'break-word',
+  },
+  clamp: {
+    overflow: 'hidden',
+    display: '-webkit-box',
+    WebkitLineClamp: 10,
+    WebkitBoxOrient: 'vertical',
+  },
+  badges: { display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' },
+  badge: { fontSize: '11px', padding: '2px 6px', background: 'rgba(0,0,0,0.08)', borderRadius: '10px', color: '#5f6368' },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    marginTop: '8px',
+    paddingTop: '4px',
+  },
+  date: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    fontSize: '11px',
+    color: '#9aa0a6',
+    transition: 'opacity 0.15s',
+  }
 }
